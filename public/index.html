@@ -535,9 +535,7 @@ async function doLogin() {
   if (!res.ok) { err.textContent = res.error; return; }
   document.getElementById('auth-login').classList.add('hidden');
   document.getElementById('auth-verify').classList.remove('hidden');
-  if (res.devCode) {
-    document.getElementById('dev-code-hint').innerHTML = `<strong>Dev mode:</strong> Your code is <strong>${res.devCode}</strong><br><small>(In production this would be emailed)</small>`;
-  }
+  document.getElementById("dev-code-hint").innerHTML = "<strong>Check your email</strong> for the 6-digit code. It may take a minute to arrive.";
   document.getElementById('verify-code')._email = email;
 }
 
