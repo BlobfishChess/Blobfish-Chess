@@ -4,6 +4,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const { Resend } = require('resend');
+const resend = new Resend('re_cfhokFpy_N8GCrGEdzPeGGHW9m5dNtpgR');
 
 const app = express();
 const server = http.createServer(app);
@@ -50,14 +52,24 @@ app.post('/api/signup', (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/login/request', (req, res) => {
+app.post('/api/login/request', async (req, res) => {
   const { email, password } = req.body;
   const user = users[email];
   if (!user || user.password !== password) return res.json({ ok: false, error: 'Invalid email or password' });
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   pendingVerifications[email] = { code, expires: Date.now() + 10 * 60 * 1000 };
-  console.log(`[2FA] Verification code for ${email}: ${code}`);
-  res.json({ ok: true, devCode: code }); // In production remove devCode
+  try {
+    await resend.emails.send({
+      from: 'Blobfish Chess <noreply@blobfish.space>',
+      to: email,
+      subject: 'Your Blobfish Chess Login Code',
+      html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:24px;background:#1a1a2e;color:#e2e8f0;border-radius:12px"><h2 style="color:#4a9eff">🐟 Blobfish Chess</h2><p style="color:#94a3b8">Your login verification code:</p><div style="font-size:36px;font-weight:800;letter-spacing:10px;color:#4a9eff;background:#0f3460;padding:20px;border-radius:10px;text-align:center">${code}</div><p style="color:#94a3b8;font-size:13px;margin-top:16px">Expires in 10 minutes.</p></div>`
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Email send error:', err);
+    res.json({ ok: true });
+  }
 });
 
 app.post('/api/login/verify', (req, res) => {
