@@ -668,7 +668,7 @@ async function apiGet(path) {
 }
 
 // ─── Game Modes ───────────────────────────────────────────────────────────────
-function openAIModal() { requireLogin(() => showModal('ai-modal')); }
+function openAIModal() { showModal('ai-modal'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 function showModal(id) { document.getElementById(id).classList.remove('hidden'); }
 
@@ -691,15 +691,13 @@ function startAIGame() {
   playerColor = color;
   initGame('ai');
 }
-function startLocalGame() { requireLogin(() => initGame('local')); }
+function startLocalGame() { initGame('local'); }
 
 // ─── Online Room ───────────────────────────────────────────────────────────────
 function openOnlineModal() {
-  requireLogin(() => {
-    showModal('online-modal');
-    document.getElementById('room-code-display').classList.add('hidden');
-    document.getElementById('online-join-section').classList.remove('hidden');
-  });
+  showModal('online-modal');
+  document.getElementById('room-code-display').classList.add('hidden');
+  document.getElementById('online-join-section').classList.remove('hidden');
 }
 function closeOnlineModal() { closeModal('online-modal'); }
 
