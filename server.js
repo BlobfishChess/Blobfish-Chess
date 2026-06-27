@@ -22,6 +22,7 @@ const users = {};       // email -> { email, password, nickname, gameHistory }
 const sessions = {};    // sessionToken -> email
 const rooms = {};       // roomCode -> { white, black, fen, moves, chat, status }
 const pendingVerifications = {}; // email -> code
+const globalQueue = []; // [{ socketId, nick }]
 
 function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -211,7 +212,46 @@ io.on('connection', (socket) => {
     socket.emit('room-state', { fen: room.fen, moves: room.moves, chat: room.chat, status: room.status });
   });
 
+  socket.on('global-queue-join', ({ nick }) => {
+    // Remove if already in queue
+    const existingIdx = globalQueue.findIndex(q => q.socketId === socket.id);
+    if (existingIdx !== -1) globalQueue.splice(existingIdx, 1);
+
+    if (globalQueue.length > 0) {
+      // Match with first in queue
+      const opponent = globalQueue.shift();
+      const code = generateRoomCode();
+      const myNick = nick || 'Player';
+      const oppNick = opponent.nick || 'Player';
+
+      rooms[code] = {
+        white: { email: null, nick: myNick, socketId: socket.id },
+        black: { email: null, nick: oppNick, socketId: opponent.socketId },
+        fen: 'start', moves: [], chat: [], status: 'ready', created: Date.now()
+      };
+
+      // Tell both players
+      socket.emit('global-match-found', { roomCode: code, color: 'white', opponentNick: oppNick });
+      io.to(opponent.socketId).emit('global-match-found', { roomCode: code, color: 'black', opponentNick: myNick });
+
+      // Broadcast new queue count
+      io.emit('global-queue-count', { count: globalQueue.length });
+    } else {
+      globalQueue.push({ socketId: socket.id, nick });
+      io.emit('global-queue-count', { count: globalQueue.length });
+    }
+  });
+
+  socket.on('global-queue-leave', () => {
+    const idx = globalQueue.findIndex(q => q.socketId === socket.id);
+    if (idx !== -1) { globalQueue.splice(idx, 1); io.emit('global-queue-count', { count: globalQueue.length }); }
+  });
+
   socket.on('disconnect', () => {
+    // Remove from global queue if present
+    const qIdx = globalQueue.findIndex(q => q.socketId === socket.id);
+    if (qIdx !== -1) { globalQueue.splice(qIdx, 1); io.emit('global-queue-count', { count: globalQueue.length }); }
+
     for (const [code, room] of Object.entries(rooms)) {
       if (room.white?.socketId === socket.id) {
         socket.to(code).emit('opponent-disconnected');
