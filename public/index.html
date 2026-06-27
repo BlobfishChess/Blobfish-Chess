@@ -202,7 +202,8 @@ nav .nav-section { padding: 12px 16px 4px; font-size: 11px; text-transform: uppe
 
 <!-- Auth Modal -->
 <div id="auth-modal" class="modal-overlay">
-  <div class="modal">
+  <div class="modal" style="position:relative">
+    <button id="auth-close-btn" onclick="closeAuthModal()" style="position:absolute;top:12px;right:12px;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1" title="Close">✕</button>
     <div id="auth-signup" class="hidden">
       <h2>Create Account</h2>
       <div class="form-group"><label>Email</label><input id="su-email" type="email" placeholder="you@example.com"/></div>
@@ -286,6 +287,27 @@ nav .nav-section { padding: 12px 16px 4px; font-size: 11px; text-transform: uppe
   </div>
 </div>
 
+<!-- Global Match Modal -->
+<div id="global-modal" class="modal-overlay hidden">
+  <div class="modal" style="text-align:center">
+    <h2>🌍 Global Match</h2>
+    <p style="color:var(--text2);font-size:14px;margin:10px 0 20px">Finding you an opponent anywhere in the world...</p>
+    <div id="global-searching">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:20px">
+        <div class="spin" style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%"></div>
+        <span id="global-status-text" style="color:var(--accent);font-weight:600">Searching for opponent...</span>
+      </div>
+      <p style="font-size:12px;color:var(--text2)" id="global-queue-count"></p>
+    </div>
+    <div id="global-found" class="hidden">
+      <div style="font-size:48px;margin-bottom:12px">⚔️</div>
+      <p style="color:var(--success);font-weight:700;font-size:18px;margin-bottom:6px">Opponent Found!</p>
+      <p style="color:var(--text2);font-size:14px" id="global-opponent-name">Starting game...</p>
+    </div>
+    <button class="btn btn-secondary" style="margin-top:16px" onclick="cancelGlobalMatch()">Cancel</button>
+  </div>
+</div>
+
 <!-- AI Difficulty Modal -->
 <div id="ai-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -324,8 +346,8 @@ nav .nav-section { padding: 12px 16px 4px; font-size: 11px; text-transform: uppe
       <div class="nav-section">Play</div>
       <a onclick="navTo('play')" data-page="play">♟ <span>Play</span></a>
       <div class="nav-section">Account</div>
-      <a onclick="navTo('history')" data-page="history">📋 <span>History</span></a>
-      <a onclick="navTo('settings')" data-page="settings">⚙️ <span>Settings</span></a>
+      <a onclick="navToGuarded('history')" data-page="history">📋 <span>History</span></a>
+      <a onclick="navToGuarded('settings')" data-page="settings">⚙️ <span>Settings</span></a>
     </nav>
     <div class="sidebar-bottom">
       <button class="btn-sm" onclick="toggleTheme()">🌙 <span>Toggle Theme</span></button>
@@ -354,6 +376,11 @@ nav .nav-section { padding: 12px 16px 4px; font-size: 11px; text-transform: uppe
             <div class="icon">🌐</div>
             <h3>Online Friend</h3>
             <p>Play in real time with a friend anywhere</p>
+          </div>
+          <div class="play-card" onclick="openGlobalMatch()">
+            <div class="icon">🌍</div>
+            <h3>Global Match</h3>
+            <p>Get matched with a random player online</p>
           </div>
         </div>
       </div>
@@ -476,6 +503,16 @@ function toggleTheme() {
 }
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
+function navToGuarded(page) {
+  if (page === 'history' || page === 'settings') {
+    if (!authToken && !localStorage.getItem('blobfish_guest')) {
+      showLogin();
+      showAuthModal();
+      return;
+    }
+  }
+  navTo(page);
+}
 function navTo(page) {
   document.querySelectorAll('.page').forEach(p => {
     p.classList.remove('active');
@@ -496,8 +533,25 @@ function navTo(page) {
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
-function showAuthModal() { document.getElementById('auth-modal').classList.remove('hidden'); }
+function showAuthModal(forceNoClose) {
+  document.getElementById('auth-modal').classList.remove('hidden');
+  // Hide close button if user must log in (no guest option shown)
+  const closeBtn = document.getElementById('auth-close-btn');
+  if (closeBtn) closeBtn.style.display = forceNoClose ? 'none' : 'block';
+}
 function hideAuthModal() { document.getElementById('auth-modal').classList.add('hidden'); }
+function closeAuthModal() {
+  // Only allow closing if already guest or logged in
+  hideAuthModal();
+}
+function requireLogin(action) {
+  if (authToken || localStorage.getItem('blobfish_guest')) {
+    action();
+  } else {
+    showLogin();
+    showAuthModal();
+  }
+}
 function showLogin() {
   document.getElementById('auth-signup').classList.add('hidden');
   document.getElementById('auth-login').classList.remove('hidden');
@@ -511,6 +565,7 @@ function playAsGuest() {
   localStorage.setItem('blobfish_guest', '1');
   hideAuthModal();
   updateSidebarUser();
+  navTo('play');
 }
 
 async function doSignup() {
@@ -562,7 +617,19 @@ async function doLogout() {
   localStorage.removeItem('blobfish_user');
   localStorage.removeItem('blobfish_guest');
   updateSidebarUser();
+  // Reset all auth fields and show login screen fresh
+  document.getElementById('li-email').value = '';
+  document.getElementById('li-pass').value = '';
+  document.getElementById('li-error').textContent = '';
+  document.getElementById('verify-code').value = '';
+  document.getElementById('verify-error').textContent = '';
+  document.getElementById('su-email').value = '';
+  document.getElementById('su-pass').value = '';
+  document.getElementById('su-nick').value = '';
+  document.getElementById('su-error').textContent = '';
+  showLogin();
   showAuthModal();
+  navTo('play');
 }
 
 function updateSidebarUser() {
@@ -593,7 +660,7 @@ async function apiGet(path) {
 }
 
 // ─── Game Modes ───────────────────────────────────────────────────────────────
-function openAIModal() { showModal('ai-modal'); }
+function openAIModal() { requireLogin(() => showModal('ai-modal')); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 function showModal(id) { document.getElementById(id).classList.remove('hidden'); }
 
@@ -616,13 +683,15 @@ function startAIGame() {
   playerColor = color;
   initGame('ai');
 }
-function startLocalGame() { initGame('local'); }
+function startLocalGame() { requireLogin(() => initGame('local')); }
 
 // ─── Online Room ───────────────────────────────────────────────────────────────
 function openOnlineModal() {
-  showModal('online-modal');
-  document.getElementById('room-code-display').classList.add('hidden');
-  document.getElementById('online-join-section').classList.remove('hidden');
+  requireLogin(() => {
+    showModal('online-modal');
+    document.getElementById('room-code-display').classList.add('hidden');
+    document.getElementById('online-join-section').classList.remove('hidden');
+  });
 }
 function closeOnlineModal() { closeModal('online-modal'); }
 
@@ -1118,6 +1187,51 @@ async function saveNickname() {
   msg.classList.remove('hidden');
   setTimeout(() => msg.classList.add('hidden'), 2000);
 }
+
+// ─── Global Matchmaking ──────────────────────────────────────────────────────
+let globalSearching = false;
+
+function openGlobalMatch() {
+  // Must be logged in - no guests allowed
+  if (!authToken) {
+    showLogin();
+    showAuthModal();
+    return;
+  }
+  showModal('global-modal');
+  document.getElementById('global-searching').classList.remove('hidden');
+  document.getElementById('global-found').classList.add('hidden');
+  globalSearching = true;
+  const nick = currentUser ? (currentUser.nickname || currentUser.email) : 'Player';
+  socket.emit('global-queue-join', { nick });
+}
+
+function cancelGlobalMatch() {
+  globalSearching = false;
+  socket.emit('global-queue-leave');
+  closeModal('global-modal');
+}
+
+// Socket listeners for global match
+socket.on('global-queue-count', ({ count }) => {
+  const el = document.getElementById('global-queue-count');
+  if (el) el.textContent = count + ' player' + (count === 1 ? '' : 's') + ' searching globally';
+});
+
+socket.on('global-match-found', ({ roomCode, color, opponentNick }) => {
+  if (!globalSearching) return;
+  document.getElementById('global-searching').classList.add('hidden');
+  document.getElementById('global-found').classList.remove('hidden');
+  document.getElementById('global-opponent-name').textContent = 'vs ' + opponentNick;
+  currentRoomCode = roomCode;
+  onlineColor = color;
+  setTimeout(() => {
+    closeModal('global-modal');
+    globalSearching = false;
+    initGame('online');
+    socket.emit('join-room', { code: roomCode, color });
+  }, 1500);
+});
 
 // Reset move counter when starting new game
 const _origInit = initGame;
